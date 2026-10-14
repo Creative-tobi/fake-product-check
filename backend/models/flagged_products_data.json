@@ -1,0 +1,47 @@
+[
+  {
+    "id": "flag-001",
+    "barcode": "8901030383451",
+    "productName": "Dove Deep Moisture Body Wash (Counterfeit Batch)",
+    "brand": "Unilever (Forged)",
+    "flagType": "SUSPECTED_COUNTERFEIT",
+    "reason": "Chemical smell reported; batch number does not match authentic Unilever format; label font mismatch",
+    "reportedExpiryDate": "2027-12-31",
+    "reportedProductionDate": "2024-01-15",
+    "batchNumber": "BCH-FAKE-992",
+    "storeLocation": "Local Open Market, Stall 4",
+    "flaggedAt": "2025-01-10T14:22:00.000Z",
+    "tamperSeverity": "HIGH",
+    "status": "CONFIRMED_FAKE"
+  },
+  {
+    "id": "flag-002",
+    "barcode": "5449000000996",
+    "productName": "Coca-Cola Original Taste 500ml",
+    "brand": "The Coca-Cola Company",
+    "flagType": "TAMPERED_DETAILS",
+    "reason": "Expired product relabeled with forged expiration date sticker placed over original stamp",
+    "reportedExpiryDate": "2023-04-10",
+    "reportedProductionDate": "2022-10-01",
+    "batchNumber": "CC-RELBL-402",
+    "storeLocation": "Metro Convenience Store",
+    "flaggedAt": "2025-02-18T09:15:00.000Z",
+    "tamperSeverity": "CRITICAL",
+    "status": "TAMPERED_DATE"
+  },
+  {
+    "id": "flag-003",
+    "barcode": "9998887776665",
+    "productName": "Nutri-Gain Infant Milk Formula",
+    "brand": "Fake Labs Int.",
+    "flagType": "INVALID_CHECKSUM",
+    "reason": "Barcode checksum failed mathematically. Product unregistered with National Food Safety Agency",
+    "reportedExpiryDate": "2026-08-20",
+    "reportedProductionDate": "2024-08-20",
+    "batchNumber": "NG-00984",
+    "storeLocation": "Wholesale Depot Area 7",
+    "flaggedAt": "2025-03-05T11:45:00.000Z",
+    "tamperSeverity": "CRITICAL",
+    "status": "UNREGISTERED_DANGEROUS"
+  }
+]
