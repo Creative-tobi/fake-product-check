@@ -14,7 +14,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   FlipHorizontal,
-  Info
+  Info,
+  Image as ImageIcon
 } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
@@ -34,9 +35,14 @@ export default function CameraBarcodeScanner({
   const [availableCameras, setAvailableCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [uploadPreview, setUploadPreview] = useState(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [showDateInputs, setShowDateInputs] = useState(false);
 
   const html5QrCodeRef = useRef(null);
+  const html5FileScannerRef = useRef(null);
+  const fileInputGalleryRef = useRef(null);
+  const fileInputCameraRef = useRef(null);
   const scannerContainerId = 'reader-viewport';
 
   // Discover connected cameras on mount
@@ -60,6 +66,11 @@ export default function CameraBarcodeScanner({
 
     return () => {
       stopCamera();
+      if (html5FileScannerRef.current) {
+        try {
+          html5FileScannerRef.current.clear();
+        } catch (e) {}
+      }
     };
   }, []);
 
@@ -157,23 +168,99 @@ export default function CameraBarcodeScanner({
     });
   };
 
-  // Handle image upload and scan barcode from file
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+  // Process and scan barcode from image file (gallery or camera snapshot)
+  const processImageFile = async (file) => {
     if (!file) return;
 
+    if (!file.type.startsWith('image/')) {
+      setCameraError('Please select a valid image file (JPG, PNG, WEBP).');
+      return;
+    }
+
     setCameraError(null);
-    setUploadPreview(URL.createObjectURL(file));
+    setIsProcessingFile(true);
+
+    if (uploadPreview) {
+      URL.revokeObjectURL(uploadPreview);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setUploadPreview(previewUrl);
 
     try {
-      const html5QrCode = new Html5Qrcode('reader-viewport-file');
-      const decodedResult = await html5QrCode.scanFile(file, true);
+      // Clear previous file scanner instance if any
+      if (html5FileScannerRef.current) {
+        try {
+          await html5FileScannerRef.current.clear();
+        } catch (e) {}
+      }
+
+      const fileScanner = new Html5Qrcode('reader-viewport-file', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        verbose: false
+      });
+      html5FileScannerRef.current = fileScanner;
+
+      const decodedResult = await fileScanner.scanFile(file, true);
       sounds.playScanBeep();
       triggerScan(decodedResult);
     } catch (err) {
-      console.error('File scan error:', err);
-      setCameraError('No readable barcode detected in this image. Please ensure the barcode is sharp, well-lit, and un-cropped.');
+      console.warn('File scan barcode recognition error:', err);
+      setCameraError(
+        'No readable barcode detected in this image. Please ensure the barcode lines and numbers are clearly visible, in focus, and un-cropped. Alternatively, you can type the barcode in the "Manual Input" tab.'
+      );
+    } finally {
+      setIsProcessingFile(false);
+      if (html5FileScannerRef.current) {
+        try {
+          await html5FileScannerRef.current.clear();
+        } catch (e) {}
+      }
     }
+  };
+
+  // Upload handler for Gallery (standard file picker, NO capture attribute)
+  const handleGalleryUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    e.target.value = '';
+  };
+
+  // Upload handler for Direct Camera Snapshot
+  const handleCameraCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    e.target.value = '';
+  };
+
+  // Drag and drop handlers for desktop/tablet
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
   };
 
   return (
@@ -336,36 +423,106 @@ export default function CameraBarcodeScanner({
         {/* MODE 2: UPLOAD IMAGE SCANNER */}
         {scanMode === 'upload' && (
           <div className="flex flex-col items-center">
-            <div id="reader-viewport-file" className="hidden"></div>
+            {/* Offscreen container with layout required by Html5Qrcode canvas rendering */}
+            <div
+              id="reader-viewport-file"
+              style={{
+                position: 'fixed',
+                top: '-9999px',
+                left: '-9999px',
+                width: '320px',
+                height: '320px',
+                overflow: 'hidden',
+                visibility: 'hidden'
+              }}
+              aria-hidden="true"
+            />
             
-            <div className="w-full max-w-lg p-8 rounded-2xl border-2 border-dashed border-slate-700 hover:border-emerald-500/60 bg-slate-950/50 flex flex-col items-center justify-center text-center transition group">
+            <div 
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`w-full max-w-lg p-8 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center ${
+                isDragOver 
+                  ? 'border-emerald-400 bg-emerald-950/25 scale-[1.01]' 
+                  : 'border-slate-700 hover:border-emerald-500/60 bg-slate-950/50'
+              }`}
+            >
               <div className="w-16 h-16 rounded-2xl bg-teal-950/50 border border-teal-500/30 flex items-center justify-center mb-4 text-teal-400 group-hover:scale-110 transition-transform">
                 <UploadCloud className="w-8 h-8" />
               </div>
 
               <h3 className="text-base font-bold text-white mb-1">
-                Upload Barcode or Label Photo
+                Upload Barcode or Packaging Photo
               </h3>
-              <p className="text-xs text-slate-400 max-w-sm mb-5">
-                Take a clear snapshot of the product packaging or barcode and upload it here for automated barcode extraction.
+              <p className="text-xs text-slate-400 max-w-sm mb-6">
+                Select a saved photo from your device's gallery or snap a fresh photo of the product package.
               </p>
 
-              <label className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-xs bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-md transition">
-                <UploadCloud className="w-4 h-4" />
-                Select Photo from Device
+              {/* Dual Action Buttons: Gallery Picker vs Camera Snapper */}
+              <div className="flex flex-wrap items-center justify-center gap-3 w-full">
+                {/* 1. Dedicated Gallery Button (Standard input, NO capture attribute) */}
+                <button
+                  type="button"
+                  disabled={isProcessingFile || isLoading}
+                  onClick={() => fileInputGalleryRef.current?.click()}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white cursor-pointer shadow-md shadow-emerald-700/20 transition active:scale-95"
+                  title="Choose existing photo from your device gallery or files"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Upload from Gallery
+                </button>
                 <input 
+                  ref={fileInputGalleryRef}
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleGalleryUpload} 
+                  className="hidden" 
+                />
+
+                {/* 2. Direct Camera Snapper (With capture='environment') */}
+                <button
+                  type="button"
+                  disabled={isProcessingFile || isLoading}
+                  onClick={() => fileInputCameraRef.current?.click()}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-200 cursor-pointer shadow-sm transition active:scale-95"
+                  title="Take a new photo using device camera"
+                >
+                  <Camera className="w-4 h-4 text-teal-400" />
+                  Take New Photo
+                </button>
+                <input 
+                  ref={fileInputCameraRef}
                   type="file" 
                   accept="image/*" 
                   capture="environment"
-                  onChange={handleFileUpload} 
+                  onChange={handleCameraCapture} 
                   className="hidden" 
                 />
-              </label>
+              </div>
 
-              {uploadPreview && (
-                <div className="mt-4 p-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-3">
-                  <img src={uploadPreview} alt="Preview" className="w-16 h-16 object-cover rounded-lg" />
-                  <span className="text-xs text-slate-400">Processing image...</span>
+              <p className="text-[11px] text-slate-500 mt-3">
+                Or drag and drop an image file directly into this area
+              </p>
+
+              {/* In-flight processing spinner */}
+              {isProcessingFile && (
+                <div className="mt-5 p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-3 animate-in fade-in">
+                  <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
+                  <span className="text-xs font-medium text-emerald-300">
+                    Scanning photo for barcode data...
+                  </span>
+                </div>
+              )}
+
+              {/* Uploaded Preview */}
+              {uploadPreview && !isProcessingFile && (
+                <div className="mt-5 p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-3 max-w-sm">
+                  <img src={uploadPreview} alt="Selected Packaging" className="w-14 h-14 object-cover rounded-lg border border-slate-700" />
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-200 truncate">Photo selected</p>
+                    <p className="text-[10px] text-slate-400">Processed for barcode verification</p>
+                  </div>
                 </div>
               )}
             </div>
